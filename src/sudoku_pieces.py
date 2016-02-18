@@ -140,7 +140,6 @@ class Block:
                 self.cells[cell].domain += block_changes[cell]
 
 
-
 class Cell:
     def __init__(self, domain, row, column, cell_number, value=0):
         self.value = value
@@ -149,10 +148,14 @@ class Cell:
         self.row = row
         self.column = column
         self.cell_number = cell_number
+        self.degree = 0
         self.mode = 'FC'
 
     def __cmp__(self, other):
         return self.cell_number - other.cell_number
+
+    def __lt__(self, other):
+        return other.cell_number > self.cell_number
 
     def remove_from_domain(self, value):
         self.domain.remove(value)

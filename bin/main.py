@@ -41,23 +41,24 @@ if __name__ == '__main__':
     sudoku_board.start_time = info.search_start
     sudoku_board.time_out_limit = float(input_info.timeout_limit)
 
-    sudoku_board.test_heap()
+    if True:
+        sudoku_board.test_heap()
+    else:
+        solved_board = sudoku_board.solve_board_heap()
+        info.search_done = time.time()
+        if solved_board is not None:
+            if solved_board.solved:
+                info.status = info.status_types["s"]
+                info.solution = solved_board.board_to_output()
+                # solved_board.print_board()
+            else:
+                info.status = info.status_types["t"]
+                info.solution = info.generate_empty_board(N)
+        else:
+            info.status = info.status_types["e"]
+            info.solution = info.generate_empty_board(N)
 
-    # solved_board = sudoku_board.solve_board()
-    # info.search_done = time.time()
-    # if solved_board is not None:
-    #     if solved_board.solved:
-    #         info.status = info.status_types["s"]
-    #         info.solution = solved_board.board_to_output()
-    #         # solved_board.print_board()
-    #     else:
-    #         info.status = info.status_types["t"]
-    #         info.solution = info.generate_empty_board(N)
-    # else:
-    #     info.status = info.status_types["e"]
-    #     info.solution = info.generate_empty_board(N)
-    #
-    # info.count_nodes = solved_board.nodes_created
-    # info.count_deadends = solved_board.times_backtracked
-    #
-    # file_writer.write_to_output(info)
+        info.count_nodes = solved_board.nodes_created
+        info.count_deadends = solved_board.times_backtracked
+
+        file_writer.write_to_output(info)

@@ -13,7 +13,7 @@ try:
 except ImportError:
     import queue as que
 
-
+from pqdict import pqdict, minpq, maxpq
 
 class SudokuSolver:
     def __init__(self, N, P, Q, board_values, input_tokens):
@@ -33,10 +33,10 @@ class SudokuSolver:
         self.nodes_created = 0
         self.times_backtracked = 0
         self.cell_queue = que.PriorityQueue()
+        self.test_queue = minpq()
         self.domain = self.get_domain()
         self.check_board_params()
         self.initialize_board()
-
 
 
 
@@ -70,7 +70,7 @@ class SudokuSolver:
 #        self.blocks[block_num].add_to_domains(value)
 
     def initialize_board(self):
-        cell_count = 0
+        cell_count = 1
         for count in range(self.n):
             self.rows.append(Row(self.n))
             self.columns.append(Column(self.n))
@@ -84,6 +84,7 @@ class SudokuSolver:
                 new_cell = Cell(copy.copy(self.domain), row, col, cell_count, cell_value)
                 if not new_cell.set:
                     self.cell_queue.put(new_cell)
+                    self.test_queue.additem(new_cell, new_cell.cell_number)
                 self.rows[row].add_to_row(new_cell)
                 self.columns[col].add_to_column(new_cell)
                 block_num = self.get_block_num(row, col)
@@ -222,10 +223,92 @@ class SudokuSolver:
                 start_col = 0
         return None
 
+    def solve_board_heap(self, start_row=0, start_col=0):
+        print()
+        self.print_board()
+        print()
+        self.nodes_created += 1
+        time_elapsed = time.time() - self.start_time
+        if time_elapsed > self.time_out_limit:
+            return self
+
+        if self.cells_solved == (self.n * self.n):
+            self.solved = True
+            return self
+        else:
+            while not self.cell_queue.empty():
+                this_cell= self.cell_queue.get()
+                row_num = this_cell.row
+                col_num = this_cell.column
+                if not this_cell.set and len(this_cell.domain) > 0:
+                    for value in this_cell.domain:
+                        this_cell.value = value
+                        print(value, row_num, col_num, self.cells_solved)
+                        print("Trying {0} at location ({1}, {2}). {3} Solved".format(value, row_num, col_num, self.cells_solved))
+                        self.print_board()
+                        row_ok, col_ok, block_ok = self.check_update(row_num, col_num, self.get_block_num(row_num, col_num))
+                        if row_ok and col_ok and block_ok:
+                            this_cell.set = True
+                            if self.input_tokens['FC']:
+                                row_changes, col_changes, block_changes = self.update_domains(row_num, col_num, self.get_block_num(row_num, col_num))
+                                if not self.check_changes(row_changes, col_changes, block_changes, row_num, col_num, self.get_block_num(row_num, col_num)):
+                                    # print("A domain is empty")
+                                    self.rows[row_num].add_to_domains(row_changes)
+                                    self.columns[col_num].add_to_domains(col_changes)
+                                    self.blocks[self.get_block_num(row_num, col_num)].add_to_domains(block_changes)
+                                    this_cell.value = 0
+                                    this_cell.set = False
+                                    continue
+                            self.cells_solved += 1
+                            if col_num == self.n - 1:
+                                next_row = row_num + 1
+                                next_col = 0
+                            else:
+                                next_row = row_num
+                                next_col = col_num + 1
+                            solved_board = self.solve_board_heap(next_row, next_col)
+                            if solved_board != None:
+                                return solved_board
+                            else:
+                                # print("Backtracking on {0} at location ({1}, {2})".format(value, row_num, col_num))
+                                this_cell.set = False
+                                self.times_backtracked += 1
+                                self.cells_solved -= 1
+                                self.cell_queue.put(this_cell)
+                                if self.input_tokens['FC']:
+                                    self.rows[row_num].add_to_domains(row_changes)
+                                    self.columns[col_num].add_to_domains(col_changes)
+                                    self.blocks[self.get_block_num(row_num, col_num)].add_to_domains(block_changes)
+                        else:
+                            this_cell.value = 0
+                            this_cell.set = False
+                            self.cell_queue.put(this_cell)
+#                                self.cells_solved -= 1
+                    this_cell.value = 0
+                    this_cell.set = False
+                    self.cell_queue.put(this_cell)
+                    return None
+                else:
+                    if col_num == self.n - 1:
+                        row_num = row_num + 1
+                        col_num = 0
+            start_row = 0
+            start_col = 0
+        return None
+
     def test_heap(self):
-        while not self.cell_queue.empty():
-            cell  = self.cell_queue.get()
-            print(cell.cell_number)
+        # self.rows[4].cells[4].cell_number = 9
+        # self.cell_queue.put(self.rows[4].cells[4])
+        change = True
+        while self.test_queue:
+            cell,_ = self.test_queue.popitem()
+            if change:
+                cell_changed = self.rows[4].cells[4]
+                cell_changed.cell_number = 9
+                self.test_queue[cell_changed] = cell_changed.cell_number
+                change = False
+            print(cell.cell_number, cell.row, cell.column)
+
 
     def board_to_output(self):
         output_string = "("
