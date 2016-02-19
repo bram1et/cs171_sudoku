@@ -45,6 +45,13 @@ class Row:
             if len(row_changes[cell]) > 0 and self.cells[cell].set == False:
                 self.cells[cell].domain += row_changes[cell]
 
+    def get_degree_cell(self, a_cell):
+        degree = 0
+        for other_cell in self.cells:
+            if not other_cell.set:
+                degree += 1
+        return degree
+
 class Column:
     def __init__(self, size):
         self.size = size
@@ -87,6 +94,14 @@ class Column:
         for cell in col_changes.keys():
             if len(col_changes[cell]) > 0 and self.cells[cell].set == False:
                 self.cells[cell].domain += col_changes[cell]
+
+    def get_degree_cell(self, a_cell):
+        degree = 0
+        for other_cell in self.cells:
+            if not other_cell.set:
+                degree += 1
+        return degree
+
 
 class Block:
     def __init__(self, rows, cols):
@@ -139,9 +154,16 @@ class Block:
             if len(block_changes[cell]) > 0 and self.cells[cell].set == False:
                 self.cells[cell].domain += block_changes[cell]
 
+    def get_degree_cell(self, a_cell):
+        degree = 0
+        for other_cell in self.cells:
+            if not other_cell.set:
+                degree += 1
+        return degree
+
 
 class Cell:
-    def __init__(self, domain, row, column, cell_number, value=0):
+    def __init__(self, domain, row, column, cell_number, input_tokens, value=0):
         self.value = value
         self.domain = [value] if value != 0 else domain
         self.set = True if value != 0 else False
@@ -149,7 +171,17 @@ class Cell:
         self.column = column
         self.cell_number = cell_number
         self.degree = 0
-        self.mode = 'FC'
+        self.input_tokens = input_tokens
+        # self.mode = 'FC'
+
+    def get_priority(self):
+        priority = [0, 0, self.cell_number]
+        if self.input_tokens['MRV']:
+            priority[0] = len(self.domain)
+        if self.input_tokens['DH']:
+            priority[1] = -1 * self.degree
+        return tuple(priority)
+
 
     def __cmp__(self, other):
         return self.cell_number - other.cell_number

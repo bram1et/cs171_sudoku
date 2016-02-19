@@ -81,10 +81,10 @@ class SudokuSolver:
                 cell_value = self.board_values[row][col]
                 if cell_value != 0:
                     self.cells_solved += 1
-                new_cell = Cell(copy.copy(self.domain), row, col, cell_count, cell_value)
+                new_cell = Cell(copy.copy(self.domain), row, col, cell_count, self.input_tokens, cell_value)
                 if not new_cell.set:
                     self.cell_queue.put(new_cell)
-                    self.test_queue.additem(new_cell, new_cell.cell_number)
+                    self.test_queue.additem(new_cell, new_cell.get_priority())
                 self.rows[row].add_to_row(new_cell)
                 self.columns[col].add_to_column(new_cell)
                 block_num = self.get_block_num(row, col)
@@ -95,6 +95,22 @@ class SudokuSolver:
             self.check_update(index, index, index)
             if self.input_tokens['FC']:
                 self.update_domains(index, index, index)
+                for key in self.test_queue.keys():
+                    self.test_queue.updateitem(key, key.get_priority())
+            if self.input_tokens['MRV']:
+                self.update_domains(index, index, index)
+                for key in self.test_queue.keys():
+                    self.test_queue.updateitem(key, key.get_priority())
+            if self.input_tokens['DH']:
+                for cell in self.test_queue.keys():
+                    row_num = cell.row
+                    col_num = cell.column
+                    block_num = self.get_block_num(row_num, col_num)
+                    row_degree = self.rows[row_num].get_degree_cell(cell)
+                    col_degree = self.columns[col_num].get_degree_cell(cell)
+                    block_degree = self.blocks[block_num].get_degree_cell(cell)
+                    cell.degree = row_degree + col_degree + block_degree
+                    self.test_queue.updateitem(cell, cell.get_priority())
 
     def print_board(self):
         for row in self.rows:
@@ -223,10 +239,12 @@ class SudokuSolver:
                 start_col = 0
         return None
 
-    def solve_board_heap(self, start_row=0, start_col=0):
-        print()
-        self.print_board()
-        print()
+    def solve_board_heap(self, print_progress=False, start_row=0, start_col=0):
+        print_progress = False
+        if print_progress == True:
+            print()
+            self.print_board()
+            print()
         self.nodes_created += 1
         time_elapsed = time.time() - self.start_time
         if time_elapsed > self.time_out_limit:
@@ -236,16 +254,20 @@ class SudokuSolver:
             self.solved = True
             return self
         else:
-            while not self.cell_queue.empty():
-                this_cell= self.cell_queue.get()
+            # while not self.cell_queue.empty():
+            while self.test_queue:
+                # this_cell= self.cell_queue.get()
+                this_cell,_ = self.test_queue.popitem()
                 row_num = this_cell.row
                 col_num = this_cell.column
+                block_num = self.get_block_num(row_num, col_num)
                 if not this_cell.set and len(this_cell.domain) > 0:
                     for value in this_cell.domain:
                         this_cell.value = value
-                        print(value, row_num, col_num, self.cells_solved)
-                        print("Trying {0} at location ({1}, {2}). {3} Solved".format(value, row_num, col_num, self.cells_solved))
-                        self.print_board()
+                        if print_progress == True:
+                            print(value, row_num, col_num, self.cells_solved)
+                            print("Trying {0} at location ({1}, {2}). {3} Solved".format(value, row_num, col_num, self.cells_solved))
+                            self.print_board()
                         row_ok, col_ok, block_ok = self.check_update(row_num, col_num, self.get_block_num(row_num, col_num))
                         if row_ok and col_ok and block_ok:
                             this_cell.set = True
@@ -259,6 +281,65 @@ class SudokuSolver:
                                     this_cell.value = 0
                                     this_cell.set = False
                                     continue
+                            if self.input_tokens['MRV'] and self.input_tokens['FC']:
+                                for row_change in row_changes.keys():
+                                    if len(row_changes[row_change]) > 0:
+                                        update_cell = self.rows[row_num].cells[row_change]
+                                        if update_cell in self.test_queue:
+                                            self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                for col_change in col_changes.keys():
+                                    if len(col_changes[col_change]) > 0:
+                                        update_cell = self.columns[col_num].cells[col_change]
+                                        if update_cell in self.test_queue:
+                                            self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                for block_change in block_changes.keys():
+                                    if len(block_changes[block_change]) > 0:
+                                        update_cell = self.blocks[block_num].cells[block_change]
+                                        if update_cell in self.test_queue:
+                                            self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                            if self.input_tokens['DH']:
+                                # get all cells in this row
+                                    # for each cell that is not set
+                                        # count number of other sells that are not set
+                                cells_in_this_row = self.rows[row_num].cells
+                                for cell_in_row in cells_in_this_row:
+                                    if not cell_in_row.set and cell_in_row in self.test_queue:
+                                        row_num_dh = cell_in_row.row
+                                        col_num_dh = cell_in_row.column
+                                        block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
+                                        row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_row)
+                                        col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_row)
+                                        block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_row)
+                                        cell_in_row.degree = row_degree + col_degree + block_degree
+                                        self.test_queue.updateitem(cell_in_row, cell_in_row.get_priority())
+
+                                cells_in_this_col = self.columns[col_num].cells
+                                for cell_in_col in cells_in_this_col:
+                                    if not cell_in_col.set and cell_in_col in self.test_queue:
+                                        row_num_dh = cell_in_col.row
+                                        col_num_dh = cell_in_col.column
+                                        block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
+                                        row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_col)
+                                        col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_col)
+                                        block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_col)
+                                        cell_in_col.degree = row_degree + col_degree + block_degree
+                                        self.test_queue.updateitem(cell_in_col, cell_in_row.get_priority())
+
+                                cells_in_this_block = self.rows[block_num].cells
+                                for cell_in_block in cells_in_this_block:
+                                    if not cell_in_block.set and cell_in_block in self.test_queue:
+                                        row_num_dh = cell_in_block.row
+                                        col_num_dh = cell_in_block.column
+                                        block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
+                                        row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_block)
+                                        col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_block)
+                                        block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_block)
+                                        cell_in_block.degree = row_degree + col_degree + block_degree
+                                        self.test_queue.updateitem(cell_in_block, cell_in_block.get_priority())
+
                             self.cells_solved += 1
                             if col_num == self.n - 1:
                                 next_row = row_num + 1
@@ -270,23 +351,91 @@ class SudokuSolver:
                             if solved_board != None:
                                 return solved_board
                             else:
-                                # print("Backtracking on {0} at location ({1}, {2})".format(value, row_num, col_num))
+                                if print_progress == True:
+                                    print("Backtracking on {0} at location ({1}, {2})".format(value, row_num, col_num))
                                 this_cell.set = False
                                 self.times_backtracked += 1
                                 self.cells_solved -= 1
-                                self.cell_queue.put(this_cell)
+                                # self.cell_queue.put(this_cell)
+                                if this_cell not in self.test_queue:
+                                    self.test_queue.additem(this_cell, this_cell.get_priority())
+
                                 if self.input_tokens['FC']:
                                     self.rows[row_num].add_to_domains(row_changes)
                                     self.columns[col_num].add_to_domains(col_changes)
                                     self.blocks[self.get_block_num(row_num, col_num)].add_to_domains(block_changes)
+
+                                if self.input_tokens['MRV'] and self.input_tokens['FC']:
+                                    for row_change in row_changes.keys():
+                                        if len(row_changes[row_change]) > 0:
+                                            update_cell = self.rows[row_num].cells[row_change]
+                                            if update_cell in self.test_queue:
+                                                self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                    for col_change in col_changes.keys():
+                                        if len(col_changes[col_change]) > 0:
+                                            update_cell = self.columns[col_num].cells[col_change]
+                                            if update_cell in self.test_queue:
+                                                self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                    for block_change in block_changes.keys():
+                                        if len(block_changes[block_change]) > 0:
+                                            update_cell = self.blocks[block_num].cells[block_change]
+                                            if update_cell in self.test_queue:
+                                                self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                if self.input_tokens['DH']:
+                                    # get all cells in this row
+                                        # for each cell that is not set
+                                            # count number of other sells that are not set
+                                    cells_in_this_row = self.rows[row_num].cells
+                                    for cell_in_row in cells_in_this_row:
+                                        if not cell_in_row.set and cell_in_row in self.test_queue:
+                                            row_num_dh = cell_in_row.row
+                                            col_num_dh = cell_in_row.column
+                                            block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
+                                            row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_row)
+                                            col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_row)
+                                            block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_row)
+                                            cell_in_row.degree = row_degree + col_degree + block_degree
+                                            self.test_queue.updateitem(cell_in_row, cell_in_row.get_priority())
+
+                                    cells_in_this_col = self.columns[col_num].cells
+                                    for cell_in_col in cells_in_this_col:
+                                        if not cell_in_col.set and cell_in_col in self.test_queue:
+                                            row_num_dh = cell_in_col.row
+                                            col_num_dh = cell_in_col.column
+                                            block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
+                                            row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_col)
+                                            col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_col)
+                                            block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_col)
+                                            cell_in_col.degree = row_degree + col_degree + block_degree
+                                            self.test_queue.updateitem(cell_in_col, cell_in_row.get_priority())
+
+                                    cells_in_this_block = self.rows[block_num].cells
+                                    for cell_in_block in cells_in_this_block:
+                                        if not cell_in_block.set and cell_in_block in self.test_queue:
+                                            row_num_dh = cell_in_block.row
+                                            col_num_dh = cell_in_block.column
+                                            block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
+                                            row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_block)
+                                            col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_block)
+                                            block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_block)
+                                            cell_in_block.degree = row_degree + col_degree + block_degree
+                                            self.test_queue.updateitem(cell_in_block, cell_in_block.get_priority())
+
                         else:
                             this_cell.value = 0
                             this_cell.set = False
-                            self.cell_queue.put(this_cell)
+                            # self.cell_queue.put(this_cell)
+                            if this_cell not in self.test_queue:
+                                self.test_queue.additem(this_cell, this_cell.get_priority())
 #                                self.cells_solved -= 1
                     this_cell.value = 0
                     this_cell.set = False
-                    self.cell_queue.put(this_cell)
+                    # self.cell_queue.put(this_cell)
+                    if this_cell not in self.test_queue:
+                        self.test_queue.additem(this_cell, this_cell.get_priority())
                     return None
                 else:
                     if col_num == self.n - 1:
@@ -296,18 +445,14 @@ class SudokuSolver:
             start_col = 0
         return None
 
-    def test_heap(self):
-        # self.rows[4].cells[4].cell_number = 9
+    def heap_test(self):
+        this_cell = self.rows[4].cells[4]
         # self.cell_queue.put(self.rows[4].cells[4])
         change = True
-        while self.test_queue:
-            cell,_ = self.test_queue.popitem()
-            if change:
-                cell_changed = self.rows[4].cells[4]
-                cell_changed.cell_number = 9
-                self.test_queue[cell_changed] = cell_changed.cell_number
-                change = False
-            print(cell.cell_number, cell.row, cell.column)
+        print(this_cell in self.test_queue)
+        # while self.test_queue:
+        #     cell, priority = self.test_queue.popitem()
+        #     print(cell.cell_number, cell.row, cell.column, (len(cell.domain), cell.degree, cell.cell_number))
 
 
     def board_to_output(self):

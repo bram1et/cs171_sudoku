@@ -41,10 +41,10 @@ if __name__ == '__main__':
     sudoku_board.start_time = info.search_start
     sudoku_board.time_out_limit = float(input_info.timeout_limit)
 
-    if True:
-        sudoku_board.test_heap()
+    if False:
+        sudoku_board.heap_test()
     else:
-        solved_board = sudoku_board.solve_board_heap()
+        solved_board = sudoku_board.solve_board_heap(False)
         info.search_done = time.time()
         if solved_board is not None:
             if solved_board.solved:
@@ -54,11 +54,12 @@ if __name__ == '__main__':
             else:
                 info.status = info.status_types["t"]
                 info.solution = info.generate_empty_board(N)
+            info.count_nodes = solved_board.nodes_created
+            info.count_deadends = solved_board.times_backtracked
         else:
             info.status = info.status_types["e"]
             info.solution = info.generate_empty_board(N)
-
-        info.count_nodes = solved_board.nodes_created
-        info.count_deadends = solved_board.times_backtracked
+            info.count_nodes = 0
+            info.count_deadends = 0
 
         file_writer.write_to_output(info)
