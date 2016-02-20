@@ -32,7 +32,7 @@ class SudokuSolver:
         self.input_tokens = input_tokens
         self.nodes_created = 0
         self.times_backtracked = 0
-        self.cell_queue = que.PriorityQueue()
+        # self.cell_queue = que.PriorityQueue()
         self.test_queue = minpq()
         self.domain = self.get_domain()
         self.check_board_params()
@@ -78,16 +78,16 @@ class SudokuSolver:
 
         for row in range(self.n):
             for col in range(self.n):
+                block_num = self.get_block_num(row, col)
                 cell_value = self.board_values[row][col]
                 if cell_value != 0:
                     self.cells_solved += 1
                 new_cell = Cell(copy.copy(self.domain), row, col, cell_count, self.input_tokens, cell_value)
                 if not new_cell.set:
-                    self.cell_queue.put(new_cell)
+                    # self.cell_queue.put(new_cell)
                     self.test_queue.additem(new_cell, new_cell.get_priority())
                 self.rows[row].add_to_row(new_cell)
                 self.columns[col].add_to_column(new_cell)
-                block_num = self.get_block_num(row, col)
                 self.blocks[block_num].add_to_block(new_cell)
                 cell_count += 1
 
@@ -106,10 +106,10 @@ class SudokuSolver:
                     row_num = cell.row
                     col_num = cell.column
                     block_num = self.get_block_num(row_num, col_num)
-                    row_degree = self.rows[row_num].get_degree_cell(cell)
-                    col_degree = self.columns[col_num].get_degree_cell(cell)
-                    block_degree = self.blocks[block_num].get_degree_cell(cell)
-                    cell.degree = row_degree + col_degree + block_degree
+                    cell.row_degree = self.rows[row_num].get_degree_cell(cell)
+                    cell.col_degree = self.columns[col_num].get_degree_cell(cell)
+                    cell.block_degree = self.blocks[block_num].get_degree_cell(cell)
+                    # cell.degree = row_degree + col_degree + block_degree
                     self.test_queue.updateitem(cell, cell.get_priority())
 
     def print_board(self):
@@ -168,6 +168,79 @@ class SudokuSolver:
                 if self.blocks[block_num].cells[cell].is_domain_empty():
                     return False
         return True
+
+    def calculate_domain_heuristic(self, row_num, col_num, block_num):
+        cells_in_this_row = self.rows[row_num].cells
+        for cell_in_row in cells_in_this_row:
+            if not cell_in_row.set and cell_in_row in self.test_queue:
+                old_degree = cell_in_row.degree
+                row_num_dh = cell_in_row.row
+                col_num_dh = cell_in_row.column
+                block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
+                row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_row)
+                col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_row)
+                block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_row)
+                cell_in_row.degree = row_degree + col_degree + block_degree
+                print("row: ", end="")
+                print(cell_in_row.degree - old_degree)
+                self.test_queue.updateitem(cell_in_row, cell_in_row.get_priority())
+
+        cells_in_this_col = self.columns[col_num].cells
+        for cell_in_col in cells_in_this_col:
+            if not cell_in_col.set and cell_in_col in self.test_queue:
+                old_degree = cell_in_col.degree
+                row_num_dh = cell_in_col.row
+                col_num_dh = cell_in_col.column
+                block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
+                row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_col)
+                col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_col)
+                block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_col)
+                cell_in_col.degree = row_degree + col_degree + block_degree
+                print("column: ", end="")
+                print(cell_in_col.degree - old_degree)
+                self.test_queue.updateitem(cell_in_col, cell_in_col.get_priority())
+
+        cells_in_this_block = self.blocks[block_num].cells
+        for cell_in_block in cells_in_this_block:
+            if not cell_in_block.set and cell_in_block in self.test_queue:
+                old_degree = cell_in_block.degree
+                row_num_dh = cell_in_block.row
+                col_num_dh = cell_in_block.column
+                block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
+                row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_block)
+                col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_block)
+                block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_block)
+                cell_in_block.degree = row_degree + col_degree + block_degree
+                print("block: ", end="")
+                print(cell_in_block.degree - old_degree)
+                self.test_queue.updateitem(cell_in_block, cell_in_block.get_priority())
+
+    def calculate_domain_heuristic_test(self, row_num, col_num, block_num, modifier):
+
+        changed_cells = set()
+
+        cells_in_this_row = self.rows[row_num].cells
+        for cell_in_row in cells_in_this_row:
+            if not cell_in_row.set and cell_in_row in self.test_queue:
+                cell_in_row.row_degree += modifier
+                changed_cells.add(cell_in_row)
+
+        cells_in_this_col = self.columns[col_num].cells
+        for cell_in_col in cells_in_this_col:
+            if not cell_in_col.set and cell_in_col in self.test_queue:
+                cell_in_col.column_degree += modifier
+                changed_cells.add(cell_in_col)
+
+        cells_in_this_block = self.blocks[block_num].cells
+        for cell_in_block in cells_in_this_block:
+            if not cell_in_block.set and cell_in_block in self.test_queue:
+                cell_in_block.block_degree += modifier
+                changed_cells.add(cell_in_block)
+
+        for changed_cell in changed_cells:
+            self.test_queue.updateitem(changed_cell, changed_cell.get_priority())
+
+
 
     def solve_board(self, start_row=0, start_col=0):
         # print()
@@ -301,44 +374,8 @@ class SudokuSolver:
                                             self.test_queue.updateitem(update_cell, update_cell.get_priority())
 
                             if self.input_tokens['DH']:
-                                # get all cells in this row
-                                    # for each cell that is not set
-                                        # count number of other sells that are not set
-                                cells_in_this_row = self.rows[row_num].cells
-                                for cell_in_row in cells_in_this_row:
-                                    if not cell_in_row.set and cell_in_row in self.test_queue:
-                                        row_num_dh = cell_in_row.row
-                                        col_num_dh = cell_in_row.column
-                                        block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
-                                        row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_row)
-                                        col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_row)
-                                        block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_row)
-                                        cell_in_row.degree = row_degree + col_degree + block_degree
-                                        self.test_queue.updateitem(cell_in_row, cell_in_row.get_priority())
-
-                                cells_in_this_col = self.columns[col_num].cells
-                                for cell_in_col in cells_in_this_col:
-                                    if not cell_in_col.set and cell_in_col in self.test_queue:
-                                        row_num_dh = cell_in_col.row
-                                        col_num_dh = cell_in_col.column
-                                        block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
-                                        row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_col)
-                                        col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_col)
-                                        block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_col)
-                                        cell_in_col.degree = row_degree + col_degree + block_degree
-                                        self.test_queue.updateitem(cell_in_col, cell_in_row.get_priority())
-
-                                cells_in_this_block = self.rows[block_num].cells
-                                for cell_in_block in cells_in_this_block:
-                                    if not cell_in_block.set and cell_in_block in self.test_queue:
-                                        row_num_dh = cell_in_block.row
-                                        col_num_dh = cell_in_block.column
-                                        block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
-                                        row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_block)
-                                        col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_block)
-                                        block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_block)
-                                        cell_in_block.degree = row_degree + col_degree + block_degree
-                                        self.test_queue.updateitem(cell_in_block, cell_in_block.get_priority())
+                                # self.calculate_domain_heuristic(row_num, col_num, block_num)
+                                self.calculate_domain_heuristic_test(row_num, col_num, block_num, -1)
 
                             self.cells_solved += 1
                             if col_num == self.n - 1:
@@ -385,44 +422,7 @@ class SudokuSolver:
                                                 self.test_queue.updateitem(update_cell, update_cell.get_priority())
 
                                 if self.input_tokens['DH']:
-                                    # get all cells in this row
-                                        # for each cell that is not set
-                                            # count number of other sells that are not set
-                                    cells_in_this_row = self.rows[row_num].cells
-                                    for cell_in_row in cells_in_this_row:
-                                        if not cell_in_row.set and cell_in_row in self.test_queue:
-                                            row_num_dh = cell_in_row.row
-                                            col_num_dh = cell_in_row.column
-                                            block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
-                                            row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_row)
-                                            col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_row)
-                                            block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_row)
-                                            cell_in_row.degree = row_degree + col_degree + block_degree
-                                            self.test_queue.updateitem(cell_in_row, cell_in_row.get_priority())
-
-                                    cells_in_this_col = self.columns[col_num].cells
-                                    for cell_in_col in cells_in_this_col:
-                                        if not cell_in_col.set and cell_in_col in self.test_queue:
-                                            row_num_dh = cell_in_col.row
-                                            col_num_dh = cell_in_col.column
-                                            block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
-                                            row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_col)
-                                            col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_col)
-                                            block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_col)
-                                            cell_in_col.degree = row_degree + col_degree + block_degree
-                                            self.test_queue.updateitem(cell_in_col, cell_in_row.get_priority())
-
-                                    cells_in_this_block = self.rows[block_num].cells
-                                    for cell_in_block in cells_in_this_block:
-                                        if not cell_in_block.set and cell_in_block in self.test_queue:
-                                            row_num_dh = cell_in_block.row
-                                            col_num_dh = cell_in_block.column
-                                            block_num_dh = self.get_block_num(row_num_dh, col_num_dh)
-                                            row_degree = self.rows[row_num_dh].get_degree_cell(cell_in_block)
-                                            col_degree = self.columns[col_num_dh].get_degree_cell(cell_in_block)
-                                            block_degree = self.blocks[block_num_dh].get_degree_cell(cell_in_block)
-                                            cell_in_block.degree = row_degree + col_degree + block_degree
-                                            self.test_queue.updateitem(cell_in_block, cell_in_block.get_priority())
+                                    self.calculate_domain_heuristic_test(row_num, col_num, block_num, +1)
 
                         else:
                             this_cell.value = 0

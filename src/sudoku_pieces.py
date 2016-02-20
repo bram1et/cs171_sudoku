@@ -1,5 +1,6 @@
 from __future__ import print_function
 import copy
+from pqdict import minpq
 
 class Row:
     def __init__(self, size):
@@ -48,7 +49,7 @@ class Row:
     def get_degree_cell(self, a_cell):
         degree = 0
         for other_cell in self.cells:
-            if not other_cell.set:
+            if not other_cell.set and other_cell != a_cell:
                 degree += 1
         return degree
 
@@ -98,7 +99,7 @@ class Column:
     def get_degree_cell(self, a_cell):
         degree = 0
         for other_cell in self.cells:
-            if not other_cell.set:
+            if not other_cell.set and other_cell != a_cell:
                 degree += 1
         return degree
 
@@ -157,7 +158,7 @@ class Block:
     def get_degree_cell(self, a_cell):
         degree = 0
         for other_cell in self.cells:
-            if not other_cell.set:
+            if not other_cell.set and other_cell != a_cell:
                 degree += 1
         return degree
 
@@ -172,14 +173,26 @@ class Cell:
         self.cell_number = cell_number
         self.degree = 0
         self.input_tokens = input_tokens
+        self.row_degree = 0
+        self.column_degree = 0
+        self.block_degree = 0
+        self.value_queue = minpq()
         # self.mode = 'FC'
+
+    def initialize_value_queue(self):
+        for val in self.domain:
+            if type(val) is int:
+                self.value_queue.additem(val, (0, val))
+            elif type(val) is str:
+                self.value_queue.additem(val, (0, val))
 
     def get_priority(self):
         priority = [0, 0, self.cell_number]
         if self.input_tokens['MRV']:
             priority[0] = len(self.domain)
         if self.input_tokens['DH']:
-            priority[1] = -1 * self.degree
+            # priority[1] = -1 * self.degree
+            priority[1] = -1 * (self.row_degree + self.column_degree + self.block_degree)
         return tuple(priority)
 
 
