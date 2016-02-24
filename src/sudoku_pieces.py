@@ -177,14 +177,23 @@ class Cell:
         self.column_degree = 0
         self.block_degree = 0
         self.value_queue = minpq()
+        self.value_dict = dict()
+        self.values_removed = []
+        self.initialize_value_queue()
         # self.mode = 'FC'
+
+    def get_order_val(self, val):
+        if type(val) is int:
+            return val
+        elif type(val) is str:
+            return ord(val)
 
     def initialize_value_queue(self):
         for val in self.domain:
             if type(val) is int:
                 self.value_queue.additem(val, (0, val))
             elif type(val) is str:
-                self.value_queue.additem(val, (0, val))
+                self.value_queue.additem(val, (0, ord(val)))
 
     def get_priority(self):
         priority = [0, 0, self.cell_number]
@@ -204,6 +213,8 @@ class Cell:
 
     def remove_from_domain(self, value):
         self.domain.remove(value)
+        if value in self.value_queue:
+            self.value_queue.pop(value)
 
     def is_domain_empty(self):
         return len(self.domain) == 0

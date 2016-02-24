@@ -44,7 +44,10 @@ if __name__ == '__main__':
     if False:
         sudoku_board.heap_test()
     else:
-        solved_board = sudoku_board.solve_board_heap(False)
+        if True:
+            solved_board = sudoku_board.solve_board_value_heap(False)
+        else:
+            solved_board = sudoku_board.solve_board_heap(False)
         info.search_done = time.time()
         if solved_board is not None:
             if solved_board.solved:

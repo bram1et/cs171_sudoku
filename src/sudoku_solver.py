@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import copy
 import time
+import random
 
 from src.sudoku_pieces import Block
 from src.sudoku_pieces import Cell
@@ -111,6 +112,37 @@ class SudokuSolver:
                     cell.block_degree = self.blocks[block_num].get_degree_cell(cell)
                     # cell.degree = row_degree + col_degree + block_degree
                     self.test_queue.updateitem(cell, cell.get_priority())
+
+            if self.input_tokens['LCV']:
+                for cell in self.test_queue.keys():
+                    self.lcv_calculation(cell)
+
+    def lcv_calculation(self, cell):
+        row_num = cell.row
+        col_num = cell.column
+        block_num = self.get_block_num(row_num, col_num)
+
+        for value in cell.domain:
+            value_constraint = 0
+            for other_cell in self.rows[row_num].cells:
+                if other_cell != cell:
+                    if value in other_cell.value_queue:
+                        value_constraint += 1
+
+            for other_cell in self.columns[col_num].cells:
+                if other_cell != cell:
+                    if value in other_cell.value_queue:
+                        value_constraint += 1
+
+            for other_cell in self.blocks[block_num].cells:
+                if other_cell != cell:
+                    if value in other_cell.value_queue:
+                        value_constraint += 1
+            if value in cell.value_queue:
+                cell.value_queue.updateitem(value, (value_constraint, cell.get_order_val(value)))
+            else:
+                cell.value_queue.additem(value, (value_constraint, cell.get_order_val(value)))
+
 
     def print_board(self):
         for row in self.rows:
@@ -445,14 +477,235 @@ class SudokuSolver:
             start_col = 0
         return None
 
+    def solve_board_value_heap(self, print_progress=False, start_row=0, start_col=0):
+        print_progress = True
+        if print_progress == True:
+            print()
+            self.print_board()
+            print()
+        self.nodes_created += 1
+        time_elapsed = time.time() - self.start_time
+        if time_elapsed > self.time_out_limit:
+            return self
+
+        if self.cells_solved == (self.n * self.n):
+            self.solved = True
+            return self
+        else:
+            # while not self.cell_queue.empty():
+            while self.test_queue:
+                # this_cell= self.cell_queue.get()
+                this_cell,_ = self.test_queue.popitem()
+                row_num = this_cell.row
+                col_num = this_cell.column
+                block_num = self.get_block_num(row_num, col_num)
+                queue_var = this_cell.value_queue
+                copy_queue = copy.copy(queue_var.copy())
+                if not this_cell.set and this_cell.value_queue:
+                    while this_cell.value_queue:
+                        value, priority = this_cell.value_queue.popitem()
+                        this_cell.value = value
+                        if print_progress == True:
+                            print(value, row_num, col_num, self.cells_solved)
+                            print("Trying {0} at location ({1}, {2}). {3} Solved".format(value, row_num, col_num, self.cells_solved))
+                            self.print_board()
+                        row_ok, col_ok, block_ok = self.check_update(row_num, col_num, self.get_block_num(row_num, col_num))
+                        if row_ok and col_ok and block_ok:
+                            this_cell.set = True
+                            if self.input_tokens['FC']:
+                                row_changes, col_changes, block_changes = self.update_domains(row_num, col_num, self.get_block_num(row_num, col_num))
+                                if not self.check_changes(row_changes, col_changes, block_changes, row_num, col_num, self.get_block_num(row_num, col_num)):
+                                    # print("A domain is empty")
+                                    self.rows[row_num].add_to_domains(row_changes)
+                                    self.columns[col_num].add_to_domains(col_changes)
+                                    self.blocks[self.get_block_num(row_num, col_num)].add_to_domains(block_changes)
+                                    this_cell.value = 0
+                                    this_cell.set = False
+
+                                    for row_change in row_changes:
+                                        if len(row_changes[row_change]) > 0:
+                                            lcv_change_cell = self.rows[row_num].cells[row_change]
+                                            self.lcv_calculation(lcv_change_cell)
+                                    for block_change in block_changes:
+                                        if len(block_changes[block_change]) > 0:
+                                            lcv_change_cell = self.blocks[block_num].cells[block_change]
+                                            self.lcv_calculation(lcv_change_cell)
+                                    for col_change in col_changes:
+                                        if len(col_changes[col_change]) > 0:
+                                            lcv_change_cell = self.columns[col_num].cells[col_change]
+                                            self.lcv_calculation(lcv_change_cell)
+                                    continue
+
+                            if self.input_tokens['MRV'] and self.input_tokens['FC']:
+                                for row_change in row_changes.keys():
+                                    if len(row_changes[row_change]) > 0:
+                                        update_cell = self.rows[row_num].cells[row_change]
+                                        if update_cell in self.test_queue:
+                                            self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                for col_change in col_changes.keys():
+                                    if len(col_changes[col_change]) > 0:
+                                        update_cell = self.columns[col_num].cells[col_change]
+                                        if update_cell in self.test_queue:
+                                            self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                for block_change in block_changes.keys():
+                                    if len(block_changes[block_change]) > 0:
+                                        update_cell = self.blocks[block_num].cells[block_change]
+                                        if update_cell in self.test_queue:
+                                            self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                            if self.input_tokens['DH']:
+                                # self.calculate_domain_heuristic(row_num, col_num, block_num)
+                                self.calculate_domain_heuristic_test(row_num, col_num, block_num, -1)
+
+                            if self.input_tokens['LCV'] and self.input_tokens['FC']:
+                                for lcv_change_cell in self.rows[row_num].cells:
+                                    if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
+                                        self.lcv_calculation(lcv_change_cell)
+                                for lcv_change_cell in self.columns[col_num].cells:
+                                    if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
+                                        self.lcv_calculation(lcv_change_cell)
+                                for lcv_change_cell in self.blocks[block_num].cells:
+                                    if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
+                                        self.lcv_calculation(lcv_change_cell)
+
+                            self.cells_solved += 1
+                            if col_num == self.n - 1:
+                                next_row = row_num + 1
+                                next_col = 0
+                            else:
+                                next_row = row_num
+                                next_col = col_num + 1
+                            solved_board = self.solve_board_value_heap(next_row, next_col)
+                            if solved_board != None:
+                                return solved_board
+                            else:
+                                if print_progress == True:
+                                    print("Backtracking on {0} at location ({1}, {2})".format(value, row_num, col_num))
+                                this_cell.set = False
+                                # this_cell.value_queue = copy.copy(copy_queue.copy())
+                                self.times_backtracked += 1
+                                self.cells_solved -= 1
+                                # self.cell_queue.put(this_cell)
+                                if this_cell not in self.test_queue:
+                                    self.test_queue.additem(this_cell, this_cell.get_priority())
+
+                                if self.input_tokens['FC']:
+                                    self.rows[row_num].add_to_domains(row_changes)
+                                    self.columns[col_num].add_to_domains(col_changes)
+                                    self.blocks[self.get_block_num(row_num, col_num)].add_to_domains(block_changes)
+
+                                    for row_change in row_changes:
+                                        if len(row_changes[row_change]) > 0:
+                                            lcv_change_cell = self.rows[row_num].cells[row_change]
+                                            self.lcv_calculation(lcv_change_cell)
+                                    for block_change in block_changes:
+                                        if len(block_changes[block_change]) > 0:
+                                            lcv_change_cell = self.blocks[block_num].cells[block_change]
+                                            self.lcv_calculation(lcv_change_cell)
+                                    for col_change in col_changes:
+                                        if len(col_changes[col_change]) > 0:
+                                            lcv_change_cell = self.columns[col_num].cells[col_change]
+                                            self.lcv_calculation(lcv_change_cell)
+
+                                if self.input_tokens['MRV'] and self.input_tokens['FC']:
+                                    for row_change in row_changes.keys():
+                                        if len(row_changes[row_change]) > 0:
+                                            update_cell = self.rows[row_num].cells[row_change]
+                                            if update_cell in self.test_queue:
+                                                self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                    for col_change in col_changes.keys():
+                                        if len(col_changes[col_change]) > 0:
+                                            update_cell = self.columns[col_num].cells[col_change]
+                                            if update_cell in self.test_queue:
+                                                self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                    for block_change in block_changes.keys():
+                                        if len(block_changes[block_change]) > 0:
+                                            update_cell = self.blocks[block_num].cells[block_change]
+                                            if update_cell in self.test_queue:
+                                                self.test_queue.updateitem(update_cell, update_cell.get_priority())
+
+                                if self.input_tokens['DH']:
+                                    self.calculate_domain_heuristic_test(row_num, col_num, block_num, +1)
+
+                                if self.input_tokens['LCV'] and self.input_tokens['FC']:
+                                    for lcv_change_cell in self.rows[row_num].cells:
+                                        if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
+                                            self.lcv_calculation(lcv_change_cell)
+                                    for lcv_change_cell in self.columns[col_num].cells:
+                                        if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
+                                            self.lcv_calculation(lcv_change_cell)
+                                    for lcv_change_cell in self.blocks[block_num].cells:
+                                        if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
+                                            self.lcv_calculation(lcv_change_cell)
+
+                        else:
+                            this_cell.value = 0
+                            this_cell.set = False
+                            # this_cell.value_queue = copy.copy(copy_queue.copy())
+                            if this_cell not in self.test_queue:
+                                self.test_queue.additem(this_cell, this_cell.get_priority())
+                                # self.cells_solved -= 1
+
+                    # print("no more values")
+                    this_cell.value = 0
+                    this_cell.set = False
+                    this_cell.value_queue = copy.copy(copy_queue.copy())
+                    if this_cell not in self.test_queue:
+                        self.test_queue.additem(this_cell, this_cell.get_priority())
+                    return None
+                else:
+                    if col_num == self.n - 1:
+                        row_num = row_num + 1
+                        col_num = 0
+            start_row = 0
+            start_col = 0
+        return None
+
     def heap_test(self):
-        this_cell = self.rows[4].cells[4]
-        # self.cell_queue.put(self.rows[4].cells[4])
-        change = True
-        print(this_cell in self.test_queue)
+        test_heap = minpq()
+        ran_list = []
+        for i in range(16 ** 3):
+            ran_list.append(i)
+        random.shuffle(ran_list)
+        start_time = time.time()
+        for i in range(16 ** 3):
+            ran_int = ran_list.pop(0)
+            if ran_int not in test_heap:
+                test_heap.additem(ran_int, ran_int)
+        while test_heap:
+            test_heap.popitem()
+        end_time = time.time()
+        print(end_time - start_time)
+        for i in range(16 ** 3):
+            ran_list.append(i)
+        random.shuffle(ran_list)
+        random.shuffle(ran_list)
+        start_time = time.time()
+        ran_list.sort()
+        for ran_int in ran_list:
+            ran_int
+        end_time = time.time()
+        print(end_time - start_time)
+        #
+        # this_cell = self.rows[4].cells[4]
+        # # self.cell_queue.put(self.rows[4].cells[4])
+        # change = True
+        # # print(this_cell in self.test_queue)
         # while self.test_queue:
         #     cell, priority = self.test_queue.popitem()
-        #     print(cell.cell_number, cell.row, cell.column, (len(cell.domain), cell.degree, cell.cell_number))
+        #     old_queue = cell.value_queue.copy()
+        #     print(id(cell.value_queue))
+        #     print(id(old_queue))
+        #     cell.value_queue = old_queue
+        #     print(id(cell.value_queue))
+        #     quit()
+        #     # while cell.value_queue:
+        #     #     value, priority = cell.value_queue.popitem()
+        #     # print()
 
 
     def board_to_output(self):
