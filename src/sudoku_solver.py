@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import copy
 import time
-import random
 
 from src.sudoku_pieces import Block
 from src.sudoku_pieces import Cell
@@ -58,18 +57,6 @@ class SudokuSolver:
         return row_changes, col_changes, block_changes
 
 
-#        print('Row Changes', end=" ")
-#        print(row_changes)
-#        print('Column Changes', end=" ")
-#        print(col_changes)
-#        print('Block Changes', end=" ")
-#        print(block_changes)
-
-#    def add_back_to_domain(self, row_num, column_num, block_num, value):
-#        self.rows[row_num].add_to_domains(value)
-#        self.columns[column_num].add_to_domains(value)
-#        self.blocks[block_num].add_to_domains(value)
-
     def initialize_board(self):
         cell_count = 1
         for count in range(self.n):
@@ -121,7 +108,7 @@ class SudokuSolver:
         row_num = cell.row
         col_num = cell.column
         block_num = self.get_block_num(row_num, col_num)
-
+        cell.value_queue = minpq()
         for value in cell.domain:
             value_constraint = 0
             for other_cell in self.rows[row_num].cells:
@@ -142,6 +129,29 @@ class SudokuSolver:
                 cell.value_queue.updateitem(value, (value_constraint, cell.get_order_val(value)))
             else:
                 cell.value_queue.additem(value, (value_constraint, cell.get_order_val(value)))
+
+    def lcv_calculation_update(self, cell):
+        row_num = cell.row
+        col_num = cell.column
+        block_num = self.get_block_num(row_num, col_num)
+        for value in cell.value_queue.keys():
+            value_constraint = 0
+            for other_cell in self.rows[row_num].cells:
+                if other_cell != cell:
+                    if value in other_cell.value_queue:
+                        value_constraint += 1
+
+            for other_cell in self.columns[col_num].cells:
+                if other_cell != cell:
+                    if value in other_cell.value_queue:
+                        value_constraint += 1
+
+            for other_cell in self.blocks[block_num].cells:
+                if other_cell != cell:
+                    if value in other_cell.value_queue:
+                        value_constraint += 1
+            if value in cell.value_queue:
+                cell.value_queue.updateitem(value, (value_constraint, cell.get_order_val(value)))
 
 
     def print_board(self):
@@ -271,78 +281,6 @@ class SudokuSolver:
 
         for changed_cell in changed_cells:
             self.test_queue.updateitem(changed_cell, changed_cell.get_priority())
-
-
-
-    def solve_board(self, start_row=0, start_col=0):
-        # print()
-        # self.print_board()
-        # print()
-        self.nodes_created += 1
-        time_elapsed = time.time() - self.start_time
-        if time_elapsed > self.time_out_limit:
-            return self
-
-        if self.cells_solved == (self.n * self.n):
-            self.solved = True
-            return self
-        else:
-            for row_num in range(start_row, self.n):
-                for col_num in range(start_col, self.n):
-                    this_cell = self.rows[row_num].cells[col_num]
-                    if not this_cell.set and len(this_cell.domain) > 0:
-                        # for value in self.domain: //commenting out for FC testing purposes
-                        for value in this_cell.domain:
-                            this_cell.value = value
-#                            print(value, row_num, col_num, self.cells_solved)
-#                             print("Trying {0} at location ({1}, {2}). {3} Solved".format(value, row_num, col_num, self.cells_solved))
-#                            self.print_board()
-                            row_ok, col_ok, block_ok = self.check_update(row_num, col_num, self.get_block_num(row_num, col_num))
-                            if row_ok and col_ok and block_ok:
-                                this_cell.set = True
-                                if self.input_tokens['FC']:
-                                    row_changes, col_changes, block_changes = self.update_domains(row_num, col_num, self.get_block_num(row_num, col_num))
-                                    if not self.check_changes(row_changes, col_changes, block_changes, row_num, col_num, self.get_block_num(row_num, col_num)):
-                                        # print("A domain is empty")
-                                        self.rows[row_num].add_to_domains(row_changes)
-                                        self.columns[col_num].add_to_domains(col_changes)
-                                        self.blocks[self.get_block_num(row_num, col_num)].add_to_domains(block_changes)
-                                        this_cell.value = 0
-                                        this_cell.set = False
-                                        continue
-                                self.cells_solved += 1
-                                if col_num == self.n - 1:
-                                    next_row = row_num + 1
-                                    next_col = 0
-                                else:
-                                    next_row = row_num
-                                    next_col = col_num + 1
-                                solved_board = self.solve_board(next_row, next_col)
-                                if solved_board != None:
-                                    return solved_board
-                                else:
-                                    # print("Backtracking on {0} at location ({1}, {2})".format(value, row_num, col_num))
-                                    this_cell.set = False
-                                    self.times_backtracked += 1
-                                    self.cells_solved -= 1
-                                    if self.input_tokens['FC']:
-                                        self.rows[row_num].add_to_domains(row_changes)
-                                        self.columns[col_num].add_to_domains(col_changes)
-                                        self.blocks[self.get_block_num(row_num, col_num)].add_to_domains(block_changes)
-                            else:
-                                this_cell.value = 0
-                                this_cell.set = False
-#                                self.cells_solved -= 1
-                        this_cell.value = 0
-                        this_cell.set = False
-                        return None
-                    else:
-                        if col_num == self.n - 1:
-                            row_num = row_num + 1
-                            col_num = 0
-                start_row = 0
-                start_col = 0
-        return None
 
     def solve_board_heap(self, print_progress=False, start_row=0, start_col=0):
         print_progress = False
@@ -477,9 +415,9 @@ class SudokuSolver:
             start_col = 0
         return None
 
-    def solve_board_value_heap(self, print_progress=False, start_row=0, start_col=0):
-        print_progress = True
-        if print_progress == True:
+    def solve_board_value_heap(self, print_progress=False):
+        # print_progress = True
+        if print_progress:
             print()
             self.print_board()
             print()
@@ -492,9 +430,7 @@ class SudokuSolver:
             self.solved = True
             return self
         else:
-            # while not self.cell_queue.empty():
             while self.test_queue:
-                # this_cell= self.cell_queue.get()
                 this_cell,_ = self.test_queue.popitem()
                 row_num = this_cell.row
                 col_num = this_cell.column
@@ -505,7 +441,7 @@ class SudokuSolver:
                     while this_cell.value_queue:
                         value, priority = this_cell.value_queue.popitem()
                         this_cell.value = value
-                        if print_progress == True:
+                        if print_progress:
                             print(value, row_num, col_num, self.cells_solved)
                             print("Trying {0} at location ({1}, {2}). {3} Solved".format(value, row_num, col_num, self.cells_solved))
                             self.print_board()
@@ -560,28 +496,22 @@ class SudokuSolver:
                                 self.calculate_domain_heuristic_test(row_num, col_num, block_num, -1)
 
                             if self.input_tokens['LCV'] and self.input_tokens['FC']:
-                                for lcv_change_cell in self.rows[row_num].cells:
-                                    if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
-                                        self.lcv_calculation(lcv_change_cell)
-                                for lcv_change_cell in self.columns[col_num].cells:
-                                    if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
-                                        self.lcv_calculation(lcv_change_cell)
-                                for lcv_change_cell in self.blocks[block_num].cells:
-                                    if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
-                                        self.lcv_calculation(lcv_change_cell)
+                                    for lcv_change_cell in self.rows[row_num].cells:
+                                        if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
+                                            self.lcv_calculation_update(lcv_change_cell)
+                                    for lcv_change_cell in self.columns[col_num].cells:
+                                        if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
+                                            self.lcv_calculation_update(lcv_change_cell)
+                                    for lcv_change_cell in self.blocks[block_num].cells:
+                                        if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
+                                            self.lcv_calculation_update(lcv_change_cell)
 
                             self.cells_solved += 1
-                            if col_num == self.n - 1:
-                                next_row = row_num + 1
-                                next_col = 0
-                            else:
-                                next_row = row_num
-                                next_col = col_num + 1
-                            solved_board = self.solve_board_value_heap(next_row, next_col)
-                            if solved_board != None:
+                            solved_board = self.solve_board_value_heap()
+                            if solved_board is not None:
                                 return solved_board
                             else:
-                                if print_progress == True:
+                                if print_progress:
                                     print("Backtracking on {0} at location ({1}, {2})".format(value, row_num, col_num))
                                 this_cell.set = False
                                 # this_cell.value_queue = copy.copy(copy_queue.copy())
@@ -634,23 +564,21 @@ class SudokuSolver:
                                 if self.input_tokens['LCV'] and self.input_tokens['FC']:
                                     for lcv_change_cell in self.rows[row_num].cells:
                                         if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
-                                            self.lcv_calculation(lcv_change_cell)
+                                            self.lcv_calculation_update(lcv_change_cell)
                                     for lcv_change_cell in self.columns[col_num].cells:
                                         if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
-                                            self.lcv_calculation(lcv_change_cell)
+                                            self.lcv_calculation_update(lcv_change_cell)
                                     for lcv_change_cell in self.blocks[block_num].cells:
                                         if lcv_change_cell in self.test_queue and lcv_change_cell != this_cell:
-                                            self.lcv_calculation(lcv_change_cell)
+                                            self.lcv_calculation_update(lcv_change_cell)
 
                         else:
                             this_cell.value = 0
                             this_cell.set = False
-                            # this_cell.value_queue = copy.copy(copy_queue.copy())
                             if this_cell not in self.test_queue:
                                 self.test_queue.additem(this_cell, this_cell.get_priority())
-                                # self.cells_solved -= 1
 
-                    # print("no more values")
+                    # no more values in this domain
                     this_cell.value = 0
                     this_cell.set = False
                     this_cell.value_queue = copy.copy(copy_queue.copy())
@@ -658,54 +586,16 @@ class SudokuSolver:
                         self.test_queue.additem(this_cell, this_cell.get_priority())
                     return None
                 else:
-                    if col_num == self.n - 1:
-                        row_num = row_num + 1
-                        col_num = 0
-            start_row = 0
-            start_col = 0
+                    pass
         return None
 
     def heap_test(self):
-        test_heap = minpq()
-        ran_list = []
-        for i in range(16 ** 3):
-            ran_list.append(i)
-        random.shuffle(ran_list)
-        start_time = time.time()
-        for i in range(16 ** 3):
-            ran_int = ran_list.pop(0)
-            if ran_int not in test_heap:
-                test_heap.additem(ran_int, ran_int)
-        while test_heap:
-            test_heap.popitem()
-        end_time = time.time()
-        print(end_time - start_time)
-        for i in range(16 ** 3):
-            ran_list.append(i)
-        random.shuffle(ran_list)
-        random.shuffle(ran_list)
-        start_time = time.time()
-        ran_list.sort()
-        for ran_int in ran_list:
-            ran_int
-        end_time = time.time()
-        print(end_time - start_time)
-        #
-        # this_cell = self.rows[4].cells[4]
-        # # self.cell_queue.put(self.rows[4].cells[4])
-        # change = True
-        # # print(this_cell in self.test_queue)
-        # while self.test_queue:
-        #     cell, priority = self.test_queue.popitem()
-        #     old_queue = cell.value_queue.copy()
-        #     print(id(cell.value_queue))
-        #     print(id(old_queue))
-        #     cell.value_queue = old_queue
-        #     print(id(cell.value_queue))
-        #     quit()
-        #     # while cell.value_queue:
-        #     #     value, priority = cell.value_queue.popitem()
-        #     # print()
+        while self.test_queue:
+            cell, priority = self.test_queue.popitem()
+            while cell.value_queue:
+                value, prio = cell.value_queue.popitem()
+                print(value, prio)
+            print()
 
 
     def board_to_output(self):

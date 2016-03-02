@@ -44,7 +44,7 @@ if __name__ == '__main__':
     if False:
         sudoku_board.heap_test()
     else:
-        if True:
+        if input_info.tokens['LCV']:
             solved_board = sudoku_board.solve_board_value_heap(False)
         else:
             solved_board = sudoku_board.solve_board_heap(False)
